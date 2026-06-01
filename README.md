@@ -33,6 +33,8 @@ A YouTube minden videóhoz külön, **csak hangot** tartalmazó sávokat is kín
 
 ## Futtatás
 
+**Teljes (FastAPI) szerver — gépen:**
+
 ```bash
 ./run.sh
 # vagy:
@@ -40,17 +42,51 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+**Függőség-könnyű szerver — bárhol, ahol csak `yt-dlp` van** (egyetlen, tiszta-Python
+csomag, nincs FastAPI/Rust fordítás):
+
+```bash
+pip install yt-dlp
+python server_lite.py            # -> http://localhost:8000
+```
+
+Mindkettő ugyanazt a frontendet és API-t (`/api/info`, `/api/audio`) adja; a közös
+logika az `app/core.py`-ban van.
+
 Nyisd meg: <http://localhost:8000>
 
-Mobilon: futtasd egy elérhető szerveren (vagy a saját géped IP-jén), és a böngészőből
-„Hozzáadás a kezdőképernyőhöz” opcióval app-szerűen használhatod.
+### 📱 Android (Termux) — közvetlenül a telefonon
+
+A legjobb mobilos teszt: a saját mobil-IP-deddel fut, így ritkán kér a YouTube
+bot-ellenőrzést, és `localhost`-on a fejezet- és zárolt képernyős vezérlés is megy.
+
+1. Telepítsd a **Termux**-ot az [F-Droid](https://f-droid.org/packages/com.termux/)-ról
+   (a Play Store-os verzió elavult).
+2. Termuxban:
+   ```bash
+   pkg install -y git
+   git clone https://github.com/lakydavid/yt2podcast.git
+   cd yt2podcast
+   bash termux.sh
+   ```
+   (Privát repónál a `git clone` kérheti a GitHub-felhasználódat és egy
+   [personal access tokent](https://github.com/settings/tokens) jelszó helyett.)
+3. A telefon böngészőjében nyisd meg: <http://localhost:8000>
+4. „Hozzáadás a kezdőképernyőhöz” → app-szerűen használható.
+
+> Tipp: a háttérben tartáshoz használj `tmux`-ot, vagy a Termux értesítésében az
+> „Acquire wakelock” opciót, hogy lejátszás közben ne álljon le.
 
 ## Felépítés
 
 ```
 app/
-  main.py            FastAPI: /api/info, /api/audio (Range-proxy), statikus kiszolgálás
+  core.py            keretrendszer-független logika (yt-dlp kinyerés, fejezetek,
+                     formátumválasztás, gyorsítótár) — csak yt-dlp-t igényel
+  main.py            FastAPI szerver (async httpx Range-proxy)
   static/index.html  egylapos frontend (lejátszó + UI)
+server_lite.py       stdlib-only szerver (csak yt-dlp kell) — Termuxhoz/minimál hosthoz
+run.sh / termux.sh   indítók gépre / Androidra
 ```
 
 ## Éles üzem / hibaelhárítás
