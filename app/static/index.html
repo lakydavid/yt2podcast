@@ -67,6 +67,23 @@
   .chip.active{border-color:var(--accent2); color:var(--accent2)}
   .data-used{margin-left:auto; color:var(--muted); font-size:.82rem}
 
+  .skiprow{display:flex; align-items:center; justify-content:center; gap:14px; margin-top:12px; position:relative}
+  .skipbtn{
+    display:inline-flex; align-items:center; gap:5px; background:var(--card2); color:var(--text);
+    border:1px solid var(--line); border-radius:99px; padding:11px 20px; font-size:1rem; font-weight:600;
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation; user-select:none; transition:transform .06s, background .12s;
+  }
+  .skipbtn:hover{background:#262b36}
+  .skipbtn:active{transform:scale(.92); background:var(--accent2); color:#1a1206}
+  .skipbtn .ski{font-size:1.05rem}
+  .skipbadge{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(.8);
+    background:var(--accent2); color:#1a1206; font-weight:800; font-size:.95rem; padding:5px 12px;
+    border-radius:99px; opacity:0; pointer-events:none; white-space:nowrap; transition:opacity .15s, transform .15s;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+  }
+  .skipbadge.show{opacity:1; transform:translate(-50%,-50%) scale(1)}
+
   #chapterswrap{margin-top:16px; border-top:1px solid var(--line); padding-top:12px}
   .chapters-head{display:flex; align-items:center; gap:8px; margin-bottom:6px}
   #chapters-title{font-size:.9rem; color:var(--muted); font-weight:600}
@@ -122,6 +139,15 @@
       </div>
     </div>
     <audio id="audio" controls preload="metadata"></audio>
+    <div class="skiprow">
+      <button class="skipbtn" data-skip="-10" aria-label="10 másodperc vissza">
+        <span class="ski">⏪</span><span class="skl">10</span>
+      </button>
+      <span id="skipbadge" class="skipbadge"></span>
+      <button class="skipbtn" data-skip="10" aria-label="10 másodperc előre">
+        <span class="skl">10</span><span class="ski">⏩</span>
+      </button>
+    </div>
     <div class="controls">
       <span style="color:var(--muted);font-size:.82rem">Sebesség:</span>
       <button class="chip" data-rate="1">1×</button>
@@ -257,6 +283,28 @@ document.querySelectorAll('.chip[data-rate]').forEach(c=>c.addEventListener("cli
   document.querySelectorAll('.chip[data-rate]').forEach(x=>x.classList.remove('active'));
   c.classList.add('active');
 }));
+
+// Rage-clickable skip: each tap adds to a pending target instead of reading the
+// (laggy, async) currentTime, so fast clicks accumulate without getting lost.
+// A single seek fires once the burst settles; a badge shows the running offset.
+let seekTarget=null, seekTimer=null, badgeTimer=null;
+function skipBy(delta){
+  const base = seekTarget!=null ? seekTarget : audio.currentTime;
+  let t = base + delta;
+  t = Math.max(0, isFinite(audio.duration) ? Math.min(t, audio.duration) : t);
+  seekTarget = t;
+  showSkipBadge(Math.round(t - audio.currentTime));
+  clearTimeout(seekTimer);
+  seekTimer = setTimeout(()=>{ audio.currentTime = seekTarget; seekTarget=null; audio.play().catch(()=>{}); }, 200);
+}
+function showSkipBadge(off){
+  const b=$("#skipbadge");
+  b.textContent=(off>0?"+":(off<0?"−":""))+Math.abs(off)+" mp";
+  b.classList.add("show");
+  clearTimeout(badgeTimer);
+  badgeTimer=setTimeout(()=>b.classList.remove("show"),700);
+}
+document.querySelectorAll('.skipbtn').forEach(btn=>btn.addEventListener("click",()=>skipBy(parseInt(btn.dataset.skip,10))));
 
 function setMediaSession(d){
   if(!("mediaSession" in navigator)) return;
