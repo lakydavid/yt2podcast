@@ -35,7 +35,7 @@ UA = (
 COOKIES_FILE = os.environ.get("YT2P_COOKIES_FILE")
 PLAYER_CLIENTS = [c.strip() for c in os.environ.get("YT2P_PLAYER_CLIENTS", "").split(",") if c.strip()]
 
-QUALITIES = ("ultra", "compat", "high")
+QUALITIES = ("ultra", "compat")
 
 
 class InfoError(Exception):
@@ -220,12 +220,10 @@ def invalidate(url: str) -> None:
 def select_format(audio_formats: list[dict], quality: str) -> dict:
     """Pick an audio format. Default favours an m4a track for broad device
     compatibility (iOS Safari) while still being very low bitrate."""
-    m4a = [f for f in audio_formats if (f["ext"] == "m4a" or (f["acodec"] or "").startswith(("mp4a", "aac")))]
-    if quality == "ultra":          # absolute smallest, may be opus
+    if quality == "ultra":  # absolute smallest, may be opus
         return audio_formats[0]
-    if quality == "high":           # best-quality m4a (still audio-only)
-        return (m4a or audio_formats)[-1]
     # "compat" (default): smallest m4a, falls back to smallest overall
+    m4a = [f for f in audio_formats if (f["ext"] == "m4a" or (f["acodec"] or "").startswith(("mp4a", "aac")))]
     return (m4a or audio_formats)[0]
 
 
