@@ -67,6 +67,18 @@
   .chip.active{border-color:var(--accent2); color:var(--accent2)}
   .data-used{margin-left:auto; color:var(--muted); font-size:.82rem}
 
+  #chapterswrap{margin-top:16px; border-top:1px solid var(--line); padding-top:12px}
+  .chapters-head{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+  #chapters-title{font-size:.9rem; color:var(--muted); font-weight:600}
+  .chapters-src{font-size:.7rem; color:var(--muted); background:var(--card2); border:1px solid var(--line); padding:2px 7px; border-radius:99px}
+  .chapters{list-style:none; margin:0; padding:0; max-height:280px; overflow:auto}
+  .chapters li{display:flex; gap:10px; align-items:baseline; padding:8px 10px; border-radius:9px; cursor:pointer; transition:.12s}
+  .chapters li:hover{background:var(--card2)}
+  .chapters li.active{background:#2a2030; border-left:3px solid var(--accent2); padding-left:7px}
+  .chapters .ctime{font-variant-numeric:tabular-nums; color:var(--accent2); font-size:.82rem; flex:none; min-width:48px}
+  .chapters li.active .ctime{color:var(--accent2)}
+  .chapters .ctitle{font-size:.9rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+
   .recent{margin-top:26px}
   .recent h2{font-size:.95rem; color:var(--muted); margin:0 0 10px; font-weight:600}
   .ritem{display:flex; gap:12px; align-items:center; padding:10px; border-radius:12px; cursor:pointer}
@@ -119,6 +131,13 @@
       <button class="chip" data-rate="2">2×</button>
       <span class="data-used" id="dataused"></span>
     </div>
+    <div id="chapterswrap" style="display:none">
+      <div class="chapters-head">
+        <span id="chapters-title">Fejezetek</span>
+        <span id="chapters-src" class="chapters-src"></span>
+      </div>
+      <ol id="chapters" class="chapters"></ol>
+    </div>
   </div>
 
   <div class="recent" id="recent" style="display:none">
@@ -163,6 +182,43 @@ async function load(url){
 }
 
 let dataBytes=0, lastTime=0;
+let chapters=[], curChap=-1;
+
+function renderChapters(d){
+  chapters=(d.chapters||[]).slice(); curChap=-1;
+  const wrap=$("#chapterswrap"), list=$("#chapters");
+  list.innerHTML="";
+  if(chapters.length<2){ wrap.style.display="none"; return; }
+  wrap.style.display="block";
+  $("#chapters-src").textContent=chapters.length+" fejezet";
+  chapters.forEach((c,i)=>{
+    const li=document.createElement("li");
+    li.innerHTML=`<span class="ctime">${fmtDur(c.start)}</span><span class="ctitle"></span>`;
+    li.querySelector(".ctitle").textContent=c.title||("Fejezet "+(i+1));
+    li.addEventListener("click",()=>jumpChapter(i));
+    list.appendChild(li);
+  });
+}
+function jumpChapter(i){
+  if(i<0||i>=chapters.length) return;
+  audio.currentTime=chapters[i].start;
+  audio.play().catch(()=>{});
+}
+function chapterIndexAt(t){
+  let idx=-1;
+  for(let i=0;i<chapters.length;i++){ if(t>=chapters[i].start-0.25) idx=i; else break; }
+  return idx;
+}
+function highlightChapter(){
+  if(chapters.length<2) return;
+  const i=chapterIndexAt(audio.currentTime);
+  if(i===curChap) return;
+  curChap=i;
+  const items=$("#chapters").children;
+  for(let k=0;k<items.length;k++) items[k].classList.toggle("active",k===i);
+  if(items[i]) items[i].scrollIntoView({block:"nearest"});
+}
+
 function render(url,d){
   const q=getQuality();
   $("#ptitle").textContent=d.title||"Névtelen";
@@ -180,6 +236,7 @@ function render(url,d){
   audio.src="/api/audio?q="+encodeURIComponent(q)+"&url="+encodeURIComponent(url);
   audio.playbackRate=1;
   document.querySelectorAll('.chip[data-rate]').forEach(c=>c.classList.toggle('active',c.dataset.rate==="1"));
+  renderChapters(d);
   player.style.display="block";
   audio.play().catch(()=>{});
   setMediaSession(d);
@@ -191,7 +248,10 @@ audio.addEventListener("timeupdate",()=>{
   const ab=(window._curQ&&window._curQ.abr)||0;
   if(ab&&audio.currentTime>lastTime){ dataBytes+=(audio.currentTime-lastTime)*ab*1000/8; lastTime=audio.currentTime;
     $("#dataused").textContent="kb. "+fmtBytes(dataBytes)+" felhasználva"; }
+  highlightChapter();
 });
+// seeking (e.g. user drags) should re-sync the active chapter immediately
+audio.addEventListener("seeked",highlightChapter);
 
 document.querySelectorAll('.chip[data-rate]').forEach(c=>c.addEventListener("click",()=>{
   audio.playbackRate=parseFloat(c.dataset.rate);
@@ -210,6 +270,16 @@ function setMediaSession(d){
   navigator.mediaSession.setActionHandler("seekforward",()=>skip(30));
   navigator.mediaSession.setActionHandler("play",()=>audio.play());
   navigator.mediaSession.setActionHandler("pause",()=>audio.pause());
+  // With chapters, the track buttons jump between chapters; otherwise skip ±.
+  const has=(d.chapters||[]).length>=2;
+  navigator.mediaSession.setActionHandler("previoustrack", has ? ()=>{
+    const i=chapterIndexAt(audio.currentTime);
+    // within first 3s of a chapter go to previous, else restart current
+    jumpChapter(audio.currentTime-(chapters[i]?.start||0) < 3 ? Math.max(0,i-1) : i);
+  } : ()=>skip(-15));
+  navigator.mediaSession.setActionHandler("nexttrack", has ? ()=>{
+    jumpChapter(chapterIndexAt(audio.currentTime)+1);
+  } : ()=>skip(30));
 }
 
 // recent (localStorage)

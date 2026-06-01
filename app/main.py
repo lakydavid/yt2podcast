@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from pathlib import Path
 
@@ -52,6 +53,56 @@ _client = httpx.AsyncClient(
     headers={"User-Agent": UA},
     verify=_HTTPX_VERIFY,
 )
+
+
+# Matches a timestamp token like 0:00, 12:34 or 1:02:03, not glued to other digits.
+_TS_RE = re.compile(r"(?<![\d:])(\d{1,2}):([0-5]?\d)(?::([0-5]?\d))?(?![\d:])")
+
+
+def _parse_chapters_from_description(desc: str | None, duration: int | None) -> list[dict]:
+    """Extract `[{start, title}]` chapters from timestamps in a description.
+
+    Used as a fallback when YouTube exposes no native chapters. Accepts the
+    common `0:00 Title` / `1:02:03 - Title` / `[0:00] Title` line formats.
+    """
+    if not desc:
+        return []
+    found: list[tuple[int, str]] = []
+    for line in desc.splitlines():
+        m = _TS_RE.search(line)
+        if not m:
+            continue
+        h_or_m, mid, last = m.groups()
+        if last is not None:  # H:MM:SS
+            secs = int(h_or_m) * 3600 + int(mid) * 60 + int(last)
+        else:  # M:SS
+            secs = int(h_or_m) * 60 + int(mid)
+        if duration and secs > duration + 1:
+            continue
+        title = (line[: m.start()] + " " + line[m.end():]).strip(" \t-–—:•·.)(][>")
+        title = re.sub(r"\s{2,}", " ", title).strip()
+        found.append((secs, title or f"{secs // 60}:{secs % 60:02d}"))
+    # Need a few, roughly starting near the top and strictly increasing in time.
+    found.sort(key=lambda x: x[0])
+    deduped: list[tuple[int, str]] = []
+    for s, t in found:
+        if not deduped or s > deduped[-1][0]:
+            deduped.append((s, t))
+    if len(deduped) < 2 or deduped[0][0] > 60:
+        return []
+    return [{"start": s, "title": t} for s, t in deduped]
+
+
+def _build_chapters(info: dict, duration: int | None) -> list[dict]:
+    native = info.get("chapters") or []
+    chapters = [
+        {"start": int(c.get("start_time") or 0), "title": (c.get("title") or "").strip()}
+        for c in native
+        if c.get("start_time") is not None
+    ]
+    if chapters:
+        return chapters
+    return _parse_chapters_from_description(info.get("description"), duration)
 
 
 def _ext_to_mime(ext: str | None) -> str:
@@ -111,13 +162,15 @@ def _extract(url: str) -> dict:
 
     audio_formats.sort(key=lambda x: x["abr"] or 1e9)
 
+    duration = info.get("duration")
     return {
         "id": info.get("id"),
         "title": info.get("title"),
         "uploader": info.get("uploader") or info.get("channel"),
-        "duration": info.get("duration"),
+        "duration": duration,
         "thumbnail": info.get("thumbnail"),
         "webpage_url": info.get("webpage_url") or url,
+        "chapters": _build_chapters(info, duration),
         "audio_formats": audio_formats,
     }
 
@@ -173,7 +226,7 @@ def _select_format(audio_formats: list[dict], quality: str) -> dict:
 @app.get("/api/info")
 async def api_info(url: str = Query(..., min_length=8)):
     info = await _get_info(url)
-    out = {k: info[k] for k in ("id", "title", "uploader", "duration", "thumbnail", "webpage_url")}
+    out = {k: info[k] for k in ("id", "title", "uploader", "duration", "thumbnail", "webpage_url", "chapters")}
     out["qualities"] = []
     seen = set()
     for q in ("ultra", "compat", "high"):

@@ -23,7 +23,9 @@ A YouTube minden videóhoz külön, **csak hangot** tartalmazó sávokat is kín
 
 - 📋 Link beillesztése, metaadatok (cím, csatorna, hossz, borító)
 - 🎚️ Minőségválasztó: **Ultra** / **Ajánlott (m4a, minden eszközön megy)** / **Jó**
-- 📱 Zárolt képernyős vezérlés (Media Session: lejátszás, ±15/30 mp ugrás)
+- 🔖 **Fejezetek**: a YouTube natív fejezetei, vagy ha nincs, a leírásból kiparse-olt
+  időbélyegek (`0:00 Cím`, `[1:02:03] Cím` stb.) – kattintásra ugrás, aktív fejezet kiemelése
+- 📱 Zárolt képernyős vezérlés (Media Session: lejátszás, ±15/30 mp, fejezet előre/hátra)
 - ⏩ Lejátszási sebesség (1× – 2×)
 - 📊 Becsült adatfelhasználás kijelzése
 - 🕘 Előzmények (helyben, `localStorage`)
