@@ -1,0 +1,38 @@
+# yt2podcast — public deployment with automatic HTTPS (Caddy + Let's Encrypt).
+#
+# 1. Copy .env.example to .env and set DOMAIN (e.g. a free DuckDNS hostname).
+# 2. (Recommended on a cloud/datacenter IP) drop a cookies.txt into ./cookies/
+#    from a logged-in — ideally throwaway — YouTube account. See DEPLOY.md.
+# 3. docker compose up -d
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      - YT2P_COOKIES_FILE=/cookies/cookies.txt   # used only if the file exists
+      - YT2P_PLAYER_CLIENTS=${YT2P_PLAYER_CLIENTS:-ios,web_safari}
+      - YT2P_MAX_STREAMS=${YT2P_MAX_STREAMS:-20}
+      - YT2P_UPDATE_YTDLP=${YT2P_UPDATE_YTDLP:-1}
+    volumes:
+      - ./cookies:/cookies:ro
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

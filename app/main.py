@@ -45,8 +45,15 @@ async def api_info(url: str = Query(..., min_length=8)):
     return core.public_info(info)
 
 
+_active_streams = 0
+
+
 @app.get("/api/audio")
 async def api_audio(request: Request, url: str = Query(...), q: str = Query("compat")):
+    global _active_streams
+    if _active_streams >= core.MAX_STREAMS:
+        raise HTTPException(status_code=503, detail="Most túl sokan hallgatnak, próbáld pár perc múlva.")
+
     info = await _get_info(url)
     fmt = core.select_format(info["audio_formats"], q)
 
@@ -76,10 +83,13 @@ async def api_audio(request: Request, url: str = Query(...), q: str = Query("com
             out_headers[h] = upstream.headers[h]
 
     async def body():
+        global _active_streams
+        _active_streams += 1
         try:
             async for chunk in upstream.aiter_raw():
                 yield chunk
         finally:
+            _active_streams -= 1
             await upstream.aclose()
 
     return StreamingResponse(body(), status_code=upstream.status_code, headers=out_headers)

@@ -5,3 +5,9 @@ venv/
 .env
 *.log
 .DS_Store
+
+# deployment secrets / state
+.env
+cookies/cookies.txt
+caddy_data/
+caddy_config/

@@ -1,0 +1,10 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+cookies/
+.env
+README.md
+DEPLOY.md

@@ -1,0 +1,8 @@
+# Automatic HTTPS via Let's Encrypt. {$DOMAIN} comes from the environment
+# (set DOMAIN in .env). Requires ports 80 and 443 reachable from the internet.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8000 {
+		flush_interval -1   # stream audio without buffering (good for Range)
+	}
+}

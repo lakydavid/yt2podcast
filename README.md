@@ -55,6 +55,17 @@ logika az `app/core.py`-ban van.
 
 Nyisd meg: <http://localhost:8000>
 
+### 🌍 Nyilvános telepítés (ingyenes felhő VM, automatikus HTTPS)
+
+Ha bárki számára elérhetővé tennéd: **[DEPLOY.md](DEPLOY.md)** — Docker + Caddy
+(auto-HTTPS), Oracle Cloud Always Free VM és DuckDNS, lépésről lépésre. Röviden:
+
+```bash
+cp .env.example .env   # állítsd be a DOMAIN-t
+# (ajánlott) tedd ide: cookies/cookies.txt
+docker compose up -d
+```
+
 ### 📱 Android (Termux) — közvetlenül a telefonon
 
 A legjobb mobilos teszt: a saját mobil-IP-deddel fut, így ritkán kér a YouTube

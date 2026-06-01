@@ -34,6 +34,12 @@ UA = (
 #   YT2P_PLAYER_CLIENTS – comma list, e.g. "ios,web_safari,tv" to dodge 403/PoToken
 COOKIES_FILE = os.environ.get("YT2P_COOKIES_FILE")
 PLAYER_CLIENTS = [c.strip() for c in os.environ.get("YT2P_PLAYER_CLIENTS", "").split(",") if c.strip()]
+# Cap simultaneous audio streams so a public instance can't be trivially
+# overwhelmed (each stream holds an upstream connection + bandwidth).
+try:
+    MAX_STREAMS = int(os.environ.get("YT2P_MAX_STREAMS", "20"))
+except ValueError:
+    MAX_STREAMS = 20
 
 QUALITIES = ("ultra", "compat")
 
