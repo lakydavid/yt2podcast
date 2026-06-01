@@ -123,6 +123,25 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 A `yt-dlp`-t érdemes naprakészen tartani (`pip install -U yt-dlp`), mert a
 YouTube gyakran változik.
 
+## Biztonság
+
+Mivel az app egy proxy, nyilvános üzemnél ezeket a védelmeket beépítettük:
+
+- **SSRF-allowlist:** a bemeneti link csak `youtube.com` / `youtu.be` /
+  `youtube-nocookie.com` lehet, a proxyzott hangforrás pedig csak YouTube-CDN
+  (`*.googlevideo.com`, `*.ytimg.com`). Így nem lehet `file://`-t, belső IP-t
+  vagy felhő-metadata endpointot (`169.254.169.254`) lekéretni. Privát/loopback
+  IP-k explicit tiltva.
+- **XSS:** minden videó-metaadat (cím, csatorna, borító) escape-elve kerül a DOM-ba.
+- **Túlterhelés:** `YT2P_MAX_STREAMS` korlátozza az egyidejű streameket; a
+  feloldott-URL gyorsítótár méretkorlátos (nincs memória-szivárgás).
+- **Hibák:** a kliens nem kap nyers kivételszöveget (nincs infó-szivárgás).
+- **Cookie-fájl:** csak olvasásra csatolva, nincs kiszolgálva.
+
+> Amit érdemes még hozzátenni nyilvánosnál: **IP-alapú rate limit** a `/api/info`-ra
+> (a kinyerés drága). Ezt legegyszerűbben a reverse proxy / Cloudflare szintjén
+> állítsd be — nincs beépítve.
+
 ## Megjegyzések
 
 - Az `/api/audio` a szerveren keresztül proxyzza a hangot, így a YouTube IP-hez kötött

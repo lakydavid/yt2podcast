@@ -98,6 +98,8 @@ class Handler(BaseHTTPRequestHandler):
         except core.InfoError as e:
             return self._json(e.status, {"error": e.detail})
         fmt = core.select_format(info["audio_formats"], quality)
+        if not core.is_allowed_media_url(fmt["url"]):
+            return self._json(502, {"error": "Nem engedélyezett hangforrás."})
 
         headers = {"User-Agent": core.UA, "Accept": "*/*"}
         rng = self.headers.get("Range")
@@ -107,11 +109,11 @@ class Handler(BaseHTTPRequestHandler):
         req = urllib.request.Request(fmt["url"], headers=headers)
         try:
             upstream = urllib.request.urlopen(req, context=_SSL_CTX, timeout=30)
-        except urllib.error.HTTPError as e:
+        except urllib.error.HTTPError:
             core.invalidate(url)  # stream URL likely expired
             return self._json(502, {"error": "A hangfolyam lejárt, próbáld újra."})
-        except (urllib.error.URLError, TimeoutError) as e:
-            return self._json(502, {"error": f"Nem sikerült elérni a hangfolyamot: {e}"})
+        except (urllib.error.URLError, TimeoutError):
+            return self._json(502, {"error": "Nem sikerült elérni a hangfolyamot."})
 
         with upstream:
             status = upstream.status or 200

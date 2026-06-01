@@ -185,6 +185,8 @@ const RECENT_KEY="yt2podcast.recent";
 function fmtBytes(b){ if(b==null) return "?"; const u=["B","KB","MB","GB"]; let i=0; while(b>=1024&&i<u.length-1){b/=1024;i++;} return b.toFixed(b<10&&i>0?1:0)+" "+u[i]; }
 function fmtDur(s){ if(!s) return ""; s=Math.round(s); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60; return (h?h+":":"")+String(m).padStart(h?2:1,"0")+":"+String(x).padStart(2,"0"); }
 function setMsg(t,cls){ msg.className="msg "+(cls||""); msg.innerHTML=t||""; }
+// Escape strings that originate from video metadata before they touch innerHTML.
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 function getQuality(){ return document.querySelector('input[name=q]:checked').value; }
 
@@ -199,7 +201,7 @@ async function load(url){
     setMsg("Kész – jó hallgatást! 🎧","ok");
     saveRecent(url,data);
   }catch(e){
-    setMsg("⚠️ "+e.message,"err");
+    setMsg("⚠️ "+esc(e.message),"err");
     player.style.display="none";
   }finally{
     goBtn.disabled=false;
@@ -254,7 +256,7 @@ function render(url,d){
   const qi=(d.qualities||[]).find(x=>x.id===q)||{};
   const badges=$("#pbadges"); badges.innerHTML="";
   if(d.duration) badges.insertAdjacentHTML("beforeend",`<span class="badge">⏱ ${fmtDur(d.duration)}</span>`);
-  if(qi.abr) badges.insertAdjacentHTML("beforeend",`<span class="badge">${qi.abr} kbps ${qi.ext||""}</span>`);
+  if(qi.abr) badges.insertAdjacentHTML("beforeend",`<span class="badge">${esc(qi.abr)} kbps ${esc(qi.ext||"")}</span>`);
   if(qi.est_bytes) badges.insertAdjacentHTML("beforeend",`<span class="badge save">≈ ${fmtBytes(qi.est_bytes)} az egész</span>`);
 
   dataBytes=0; lastTime=0; $("#dataused").textContent="";
@@ -342,9 +344,9 @@ function renderRecent(){
   box.style.display="block"; list.innerHTML="";
   r.forEach(item=>{
     const el=document.createElement("div"); el.className="ritem";
-    el.innerHTML=`<img src="${item.thumbnail||""}" alt=""><div style="min-width:0">
-      <p class="rt">${(item.title||item.url).replace(/</g,"&lt;")}</p>
-      <p class="rc">${(item.uploader||"")} ${item.duration?"· "+fmtDur(item.duration):""}</p></div>
+    el.innerHTML=`<img src="${esc(item.thumbnail||"")}" alt="" loading="lazy"><div style="min-width:0">
+      <p class="rt">${esc(item.title||item.url)}</p>
+      <p class="rc">${esc(item.uploader||"")} ${item.duration?"· "+fmtDur(item.duration):""}</p></div>
       <button class="rdel" title="Törlés">✕</button>`;
     el.querySelector(".rt").parentElement.addEventListener("click",()=>{urlIn.value=item.url; load(item.url);});
     el.querySelector("img").addEventListener("click",()=>{urlIn.value=item.url; load(item.url);});

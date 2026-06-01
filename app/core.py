@@ -6,11 +6,13 @@ server (`server_lite.py`, handy on Termux / minimal hosts).
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import re
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yt_dlp
 
@@ -42,6 +44,53 @@ except ValueError:
     MAX_STREAMS = 20
 
 QUALITIES = ("ultra", "compat")
+
+# Keep the resolved-URL cache bounded so a flood of distinct links can't grow
+# memory without limit.
+MAX_CACHE_ENTRIES = 512
+
+# SSRF defense: only these hosts may be submitted as input, and only these may
+# be proxied as the resolved media stream. Everything else (file://, internal
+# IPs, cloud metadata at 169.254.169.254, other yt-dlp extractors) is refused.
+_INPUT_HOST_SUFFIXES = ("youtube.com", "youtu.be", "youtube-nocookie.com")
+_MEDIA_HOST_SUFFIXES = (".googlevideo.com", ".youtube.com", ".ytimg.com")
+
+
+def _host_allowed(host: str, suffixes: tuple[str, ...]) -> bool:
+    host = host.lower().rstrip(".")
+    return any(host == s.lstrip(".") or host.endswith(s if s.startswith(".") else "." + s)
+               for s in suffixes)
+
+
+def check_input_url(url: str) -> None:
+    """Reject anything that isn't a plain http(s) YouTube link (anti-SSRF)."""
+    try:
+        p = urlparse(url)
+    except ValueError:
+        raise InfoError(400, "Érvénytelen URL.")
+    if p.scheme not in ("http", "https") or not p.hostname:
+        raise InfoError(400, "Csak http(s) YouTube-linkek engedélyezettek.")
+    if not _host_allowed(p.hostname, _INPUT_HOST_SUFFIXES):
+        raise InfoError(400, "Csak YouTube-linkek engedélyezettek.")
+
+
+def is_allowed_media_url(url: str) -> bool:
+    """True only for YouTube CDN hosts and never for private/loopback IPs."""
+    try:
+        p = urlparse(url)
+    except ValueError:
+        return False
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return False
+    host = p.hostname
+    try:
+        ip = ipaddress.ip_address(host)
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast):
+            return False
+    except ValueError:
+        pass  # not a literal IP — fall through to host allowlist
+    return _host_allowed(host, _MEDIA_HOST_SUFFIXES)
 
 
 class InfoError(Exception):
@@ -200,6 +249,7 @@ def get_info(url: str) -> dict:
 
     Raises ``InfoError`` with a user-friendly Hungarian message on failure.
     """
+    check_input_url(url)
     now = time.time()
     with _cache_lock:
         cached = _info_cache.get(url)
@@ -209,12 +259,17 @@ def get_info(url: str) -> dict:
         info = _extract(url)
     except yt_dlp.utils.DownloadError as e:
         raise InfoError(422, clean_err(str(e)))
-    except Exception as e:  # noqa: BLE001
-        raise InfoError(500, f"Hiba a feldolgozáskor: {e}")
+    except InfoError:
+        raise
+    except Exception:  # noqa: BLE001 — don't leak internals to the client
+        raise InfoError(500, "Váratlan hiba a feldolgozás közben.")
     if not info.get("audio_formats"):
         raise InfoError(422, "Ehhez a videóhoz nincs elérhető hangsáv.")
     with _cache_lock:
         _info_cache[url] = (now, info)
+        if len(_info_cache) > MAX_CACHE_ENTRIES:  # evict oldest
+            oldest = min(_info_cache, key=lambda k: _info_cache[k][0])
+            _info_cache.pop(oldest, None)
     return info
 
 

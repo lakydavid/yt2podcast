@@ -54,24 +54,33 @@ async def api_audio(request: Request, url: str = Query(...), q: str = Query("com
     if _active_streams >= core.MAX_STREAMS:
         raise HTTPException(status_code=503, detail="Most túl sokan hallgatnak, próbáld pár perc múlva.")
 
-    info = await _get_info(url)
-    fmt = core.select_format(info["audio_formats"], q)
-
-    fwd_headers = {"User-Agent": core.UA, "Accept": "*/*"}
-    range_header = request.headers.get("range")
-    if range_header:
-        fwd_headers["Range"] = range_header
-
+    # Reserve a slot up front so a burst can't slip past the gate; released in
+    # the body's finally on success, or here on any setup failure.
+    _active_streams += 1
     try:
-        upstream_req = _client.build_request("GET", fmt["url"], headers=fwd_headers)
-        upstream = await _client.send(upstream_req, stream=True)
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Nem sikerült elérni a hangfolyamot: {e}")
+        info = await _get_info(url)
+        fmt = core.select_format(info["audio_formats"], q)
+        if not core.is_allowed_media_url(fmt["url"]):
+            raise HTTPException(status_code=502, detail="Nem engedélyezett hangforrás.")
 
-    if upstream.status_code >= 400:
-        await upstream.aclose()
-        core.invalidate(url)  # stream URL likely expired — re-resolve next time
-        raise HTTPException(status_code=502, detail="A hangfolyam lejárt, próbáld újra.")
+        fwd_headers = {"User-Agent": core.UA, "Accept": "*/*"}
+        range_header = request.headers.get("range")
+        if range_header:
+            fwd_headers["Range"] = range_header
+
+        try:
+            upstream_req = _client.build_request("GET", fmt["url"], headers=fwd_headers)
+            upstream = await _client.send(upstream_req, stream=True)
+        except httpx.HTTPError:
+            raise HTTPException(status_code=502, detail="Nem sikerült elérni a hangfolyamot.")
+
+        if upstream.status_code >= 400:
+            await upstream.aclose()
+            core.invalidate(url)  # stream URL likely expired — re-resolve next time
+            raise HTTPException(status_code=502, detail="A hangfolyam lejárt, próbáld újra.")
+    except BaseException:
+        _active_streams -= 1
+        raise
 
     out_headers = {
         "Content-Type": upstream.headers.get("content-type", fmt["mime"]),
@@ -84,7 +93,6 @@ async def api_audio(request: Request, url: str = Query(...), q: str = Query("com
 
     async def body():
         global _active_streams
-        _active_streams += 1
         try:
             async for chunk in upstream.aiter_raw():
                 yield chunk
