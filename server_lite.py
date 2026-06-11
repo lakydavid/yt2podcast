@@ -42,8 +42,8 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "yt2podcast-lite"
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, *args):  # quieter logs
-        pass
+    def log_message(self, fmt, *args):  # concise access log: ›"GET /path" 206
+        sys.stderr.write("› " + (fmt % args) + "\n")
 
     # -- helpers ---------------------------------------------------------
     def _json(self, status: int, payload: dict):
