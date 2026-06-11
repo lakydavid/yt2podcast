@@ -110,7 +110,8 @@ async def healthz():
 
 @app.get("/")
 async def index():
-    return FileResponse(core.STATIC_DIR / "index.html")
+    # Always revalidate the HTML so UI updates show up without a manual cache clear.
+    return FileResponse(core.STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.exception_handler(HTTPException)
