@@ -42,15 +42,24 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-**Függőség-könnyű szerver — bárhol, ahol csak `yt-dlp` van** (egyetlen, tiszta-Python
-csomag, nincs FastAPI/Rust fordítás):
+**Könnyű szerver Rust/pydantic fordítás nélkül** (Termuxhoz/minimál hosthoz) —
+Starlette + uvicorn, mind tiszta-Python csomag, de a streaminget/tekergetést
+profin kezeli:
+
+```bash
+pip install yt-dlp starlette uvicorn httpx
+uvicorn app.lite_app:app --host 0.0.0.0 --port 8000
+```
+
+**Nulla-függőséges tartalék** (csak `yt-dlp`, stdlib http-szerver) — egyszerű
+esetekre; böngészős tekergetésnél a fenti uvicornos verzió a megbízhatóbb:
 
 ```bash
 pip install yt-dlp
-python server_lite.py            # -> http://localhost:8000
+python server_lite.py
 ```
 
-Mindkettő ugyanazt a frontendet és API-t (`/api/info`, `/api/audio`) adja; a közös
+Mind ugyanazt a frontendet és API-t (`/api/info`, `/api/audio`) adja; a közös
 logika az `app/core.py`-ban van.
 
 Nyisd meg: <http://localhost:8000>

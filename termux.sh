@@ -5,12 +5,13 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "==> Installing Python + yt-dlp (first run only)…"
+echo "==> Installing Python + deps (first run only)…"
 pkg update -y >/dev/null 2>&1 || true
 pkg install -y python >/dev/null 2>&1 || true
-pip install -U --quiet yt-dlp
+# All pure-Python wheels — no Rust/pydantic compilation needed on Termux.
+pip install -U --quiet yt-dlp starlette "uvicorn" httpx
 
 PORT="${PORT:-8000}"
 echo "==> Starting yt2podcast on http://localhost:$PORT"
 echo "    Open that address in your phone's browser. Ctrl+C to stop."
-PORT="$PORT" python server_lite.py
+exec python -m uvicorn app.lite_app:app --host 0.0.0.0 --port "$PORT"
