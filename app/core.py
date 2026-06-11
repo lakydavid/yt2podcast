@@ -281,11 +281,17 @@ def invalidate(url: str) -> None:
 def select_format(audio_formats: list[dict], quality: str) -> dict:
     """Two extremes (formats are pre-sorted by ascending bitrate):
     - "best": highest-bitrate audio-only track (music; usually opus ~160 kbps)
-    - "min" (default): smallest track — least data, fine for speech/podcasts.
+    - "min" (default): smallest *reliable* track — least data, fine for speech.
+
+    YouTube's "-drc" (dynamic-range-compressed) and "ultralow" (<40 kbps, itag
+    599/600) tracks are skipped: the ultralow opus stalls/stutters in browsers,
+    and the ~48–50 kbps tier is still tiny but streams smoothly.
     """
+    usable = [f for f in audio_formats if "drc" not in (f.get("format_id") or "").lower()] or audio_formats
     if quality == "best":
-        return audio_formats[-1]
-    return audio_formats[0]
+        return usable[-1]
+    standard = [f for f in usable if (f["abr"] or 0) >= 40]
+    return (standard or usable)[0]
 
 
 def public_info(info: dict) -> dict:
