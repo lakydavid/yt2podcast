@@ -69,11 +69,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/healthz":
                 return self._json(200, {"ok": True})
             return self._static(path)
-        except BrokenPipeError:
-            pass  # client went away mid-stream
-        except Exception as e:  # noqa: BLE001
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass  # client seeked/closed mid-stream — normal, just stop
+        except Exception:  # noqa: BLE001
             try:
-                self._json(500, {"error": f"Szerverhiba: {e}"})
+                self._json(500, {"error": "Szerverhiba."})
             except OSError:
                 pass
 
