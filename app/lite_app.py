@@ -12,6 +12,7 @@ range requests and client aborts correctly.
 from __future__ import annotations
 
 import asyncio
+import sys
 
 import httpx
 from starlette.applications import Starlette
@@ -84,6 +85,12 @@ async def api_audio(request):
         _active_streams -= 1
         raise
 
+    sys.stderr.write(
+        f"[audio] range={rng or '-'} -> {upstream.status_code} "
+        f"crange={upstream.headers.get('content-range','-')} "
+        f"clen={upstream.headers.get('content-length','-')}\n"
+    )
+
     out_headers = {
         "Content-Type": upstream.headers.get("content-type", fmt["mime"]),
         "Accept-Ranges": "bytes",
@@ -95,12 +102,21 @@ async def api_audio(request):
 
     async def body():
         global _active_streams
+        n = 0
+        status = "done"
         try:
             async for chunk in upstream.aiter_raw():
+                n += len(chunk)
                 yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
+            status = "client-abort(seek/close)"
+            raise
+        except Exception as e:  # noqa: BLE001
+            status = f"error:{e!r}"
         finally:
             _active_streams -= 1
             await upstream.aclose()
+            sys.stderr.write(f"[audio] {status} sent={n}B active={_active_streams}\n")
 
     return StreamingResponse(body(), status_code=upstream.status_code, headers=out_headers)
 
