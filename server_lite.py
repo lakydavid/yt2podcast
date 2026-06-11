@@ -120,7 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(status)
             self.send_header("Content-Type", upstream.headers.get("Content-Type", fmt["mime"]))
             self.send_header("Accept-Ranges", "bytes")
-            self.send_header("Cache-Control", "no-store")
+            # Keep cacheable — no-store makes Chromium treat audio as a
+            # non-seekable live stream and breaks seeking.
             for h in ("Content-Length", "Content-Range"):
                 v = upstream.headers.get(h)
                 if v is not None:

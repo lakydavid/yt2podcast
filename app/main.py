@@ -82,10 +82,11 @@ async def api_audio(request: Request, url: str = Query(...), q: str = Query("com
         _active_streams -= 1
         raise
 
+    # NB: must stay cacheable — a no-store/no-cache header makes Chromium treat
+    # the audio as a non-seekable live stream, which breaks seeking.
     out_headers = {
         "Content-Type": upstream.headers.get("content-type", fmt["mime"]),
         "Accept-Ranges": "bytes",
-        "Cache-Control": "no-store",
     }
     for h in ("content-length", "content-range"):
         if h in upstream.headers:
