@@ -279,17 +279,24 @@ def invalidate(url: str) -> None:
 
 
 def select_format(audio_formats: list[dict], quality: str) -> dict:
-    """Two extremes (formats are pre-sorted by ascending bitrate):
-    - "best": highest-bitrate audio-only track (music; usually opus ~160 kbps)
-    - "min" (default): smallest *reliable* track — least data, fine for speech.
+    """Two extremes (formats are pre-sorted by ascending bitrate).
 
-    YouTube's "-drc" (dynamic-range-compressed) and "ultralow" (<40 kbps, itag
-    599/600) tracks are skipped: the ultralow opus stalls/stutters in browsers,
-    and the ~48–50 kbps tier is still tiny but streams smoothly.
+    Both prefer **Opus/WebM**: YouTube's audio m4a is fragmented (DASH) and
+    streams/seeks badly in browsers (the player thrashes on byte 0), whereas
+    WebM/Opus plays smoothly at any bitrate.
+    - "best": highest-bitrate Opus track (music; usually ~160 kbps)
+    - "min" (default): smallest non-"ultralow" Opus (~50 kbps) — tiny but smooth.
+
+    "-drc" (dynamic-range-compressed) and sub-40 kbps "ultralow" tracks are
+    skipped. Falls back to whatever exists if a video has no Opus.
     """
     usable = [f for f in audio_formats if "drc" not in (f.get("format_id") or "").lower()] or audio_formats
+    opus = [f for f in usable if (f.get("acodec") or "").startswith("opus")]
     if quality == "best":
-        return usable[-1]
+        return (opus or usable)[-1]
+    low_opus = [f for f in opus if (f["abr"] or 0) >= 40]
+    if low_opus:
+        return low_opus[0]
     standard = [f for f in usable if (f["abr"] or 0) >= 40]
     return (standard or usable)[0]
 
