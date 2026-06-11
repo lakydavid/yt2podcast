@@ -12,8 +12,8 @@ A YouTube minden videóhoz külön, **csak hangot** tartalmazó sávokat is kín
 | | adat / óra | 3 órás videó |
 |---|---|---|
 | 720p videó | ~1–1.5 GB | ~3–4 GB |
-| **yt2podcast (ajánlott ~48 kbps)** | **~22 MB** | **~65 MB** |
-| **yt2podcast (ultra ~30 kbps)** | **~14 MB** | **~40 MB** |
+| **yt2podcast 🎙️ Podcast (~30–48 kbps)** | **~14–22 MB** | **~40–65 MB** |
+| **yt2podcast 🎵 Zene (~160 kbps)** | **~72 MB** | **~216 MB** |
 
 - A tekergetés (seek) is csak a szükséges részt tölti le.
 - Több órás videók is gond nélkül hallgathatók.
@@ -22,7 +22,7 @@ A YouTube minden videóhoz külön, **csak hangot** tartalmazó sávokat is kín
 ## Funkciók
 
 - 📋 Link beillesztése, metaadatok (cím, csatorna, hossz, borító)
-- 🎚️ Minőségválasztó: **Ultra** / **Ajánlott (m4a, minden eszközön megy)** / **Jó**
+- 🎚️ Két véglet: **🎙️ Podcast** (legkisebb adat, beszédre) és **🎵 Zene** (legjobb minőség, jellemzően opus ~160 kbps) — a választott mód megjegyződik
 - 🔖 **Fejezetek**: a YouTube natív fejezetei, vagy ha nincs, a leírásból kiparse-olt
   időbélyegek (`0:00 Cím`, `[1:02:03] Cím` stb.) – kattintásra ugrás, aktív fejezet kiemelése
 - 📱 Zárolt képernyős vezérlés (Media Session: lejátszás, ±15/30 mp, fejezet előre/hátra)

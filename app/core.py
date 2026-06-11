@@ -43,7 +43,7 @@ try:
 except ValueError:
     MAX_STREAMS = 20
 
-QUALITIES = ("ultra", "compat")
+QUALITIES = ("min", "best")
 
 # Keep the resolved-URL cache bounded so a flood of distinct links can't grow
 # memory without limit.
@@ -279,13 +279,13 @@ def invalidate(url: str) -> None:
 
 
 def select_format(audio_formats: list[dict], quality: str) -> dict:
-    """Pick an audio format. Default favours an m4a track for broad device
-    compatibility (iOS Safari) while still being very low bitrate."""
-    if quality == "ultra":  # absolute smallest, may be opus
-        return audio_formats[0]
-    # "compat" (default): smallest m4a, falls back to smallest overall
-    m4a = [f for f in audio_formats if (f["ext"] == "m4a" or (f["acodec"] or "").startswith(("mp4a", "aac")))]
-    return (m4a or audio_formats)[0]
+    """Two extremes (formats are pre-sorted by ascending bitrate):
+    - "best": highest-bitrate audio-only track (music; usually opus ~160 kbps)
+    - "min" (default): smallest track — least data, fine for speech/podcasts.
+    """
+    if quality == "best":
+        return audio_formats[-1]
+    return audio_formats[0]
 
 
 def public_info(info: dict) -> dict:

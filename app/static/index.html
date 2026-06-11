@@ -127,8 +127,8 @@
     </form>
 
     <div class="quality" role="radiogroup" aria-label="Minőség">
-      <label><input type="radio" name="q" value="ultra"><span class="qbox"><b>Ultra</b><small>legkevesebb adat</small></span></label>
-      <label><input type="radio" name="q" value="compat" checked><span class="qbox"><b>Ajánlott</b><small>kis adat · minden eszköz</small></span></label>
+      <label><input type="radio" name="q" value="min" checked><span class="qbox"><b>🎙️ Podcast</b><small>legkevesebb adat</small></span></label>
+      <label><input type="radio" name="q" value="best"><span class="qbox"><b>🎵 Zene</b><small>legjobb minőség</small></span></label>
     </div>
 
     <div id="msg" class="msg" aria-live="polite"></div>
@@ -189,7 +189,10 @@ function setMsg(t,cls){ msg.className="msg "+(cls||""); msg.innerHTML=t||""; }
 // Escape strings that originate from video metadata before they touch innerHTML.
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+const QUALITY_KEY="yt2podcast.quality";
 function getQuality(){ return document.querySelector('input[name=q]:checked').value; }
+// restore last-used quality
+(function(){ const saved=localStorage.getItem(QUALITY_KEY); const r=saved&&document.querySelector(`input[name=q][value="${saved}"]`); if(r) r.checked=true; })();
 
 async function load(url){
   setMsg('<span class="spinner"></span>Feldolgozás…');
@@ -355,7 +358,7 @@ function renderRecent(){
 
 form.addEventListener("submit",e=>{e.preventDefault(); const u=urlIn.value.trim(); if(u){window._curQ=null; load(u);} });
 // reload current src when quality changes mid-session
-document.querySelectorAll('input[name=q]').forEach(r=>r.addEventListener("change",()=>{ if(urlIn.value.trim()&&player.style.display!=="none") load(urlIn.value.trim()); }));
+document.querySelectorAll('input[name=q]').forEach(r=>r.addEventListener("change",()=>{ localStorage.setItem(QUALITY_KEY,getQuality()); if(urlIn.value.trim()&&player.style.display!=="none") load(urlIn.value.trim()); }));
 
 // keep _curQ in sync for data estimate
 const _origRender=render;
