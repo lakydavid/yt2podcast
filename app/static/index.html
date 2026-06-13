@@ -89,6 +89,23 @@
   .pp:active{transform:scale(.92)}
   .time{color:var(--muted); font-size:.95rem; font-variant-numeric:tabular-nums}
 
+  .skiprow{display:flex; align-items:center; justify-content:center; gap:8px; margin-top:12px; position:relative}
+  .skipbtn{
+    flex:1 1 0; min-width:0; display:inline-flex; align-items:center; justify-content:center; gap:4px;
+    background:var(--card2); color:var(--text);
+    border:1px solid var(--line); border-radius:99px; padding:11px 8px; font-size:.95rem; font-weight:600;
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation; user-select:none; transition:transform .06s, background .12s;
+  }
+  .skipbtn:active{transform:scale(.92); background:var(--accent2); color:#1a1206}
+  .skipbtn .ski{font-size:1.05rem}
+  .skipbadge{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%) scale(.8);
+    background:var(--accent2); color:#1a1206; font-weight:800; font-size:.95rem; padding:5px 12px;
+    border-radius:99px; opacity:0; pointer-events:none; white-space:nowrap; transition:opacity .15s, transform .15s;
+    box-shadow:0 4px 14px rgba(0,0,0,.4);
+  }
+  .skipbadge.show{opacity:1; transform:translate(-50%,-50%) scale(1)}
+
   #chapterswrap{margin-top:16px; border-top:1px solid var(--line); padding-top:12px}
   .chapters-head{display:flex; align-items:center; gap:8px; margin-bottom:6px}
   #chapters-title{font-size:.9rem; color:var(--muted); font-weight:600}
@@ -148,6 +165,13 @@
     <div class="pbrow">
       <button id="playpause" class="pp" aria-label="Lejátszás">▶</button>
       <span id="times" class="time">0:00 / 0:00</span>
+    </div>
+    <div class="skiprow">
+      <button class="skipbtn" data-skip="-60" aria-label="1 perc vissza"><span class="ski">⏪</span><span class="skl">1p</span></button>
+      <button class="skipbtn" data-skip="-10" aria-label="10 másodperc vissza"><span class="ski">⏪</span><span class="skl">10</span></button>
+      <span id="skipbadge" class="skipbadge"></span>
+      <button class="skipbtn" data-skip="10" aria-label="10 másodperc előre"><span class="skl">10</span><span class="ski">⏩</span></button>
+      <button class="skipbtn" data-skip="60" aria-label="1 perc előre"><span class="skl">1p</span><span class="ski">⏩</span></button>
     </div>
     <div class="controls">
       <span style="color:var(--muted);font-size:.82rem">Sebesség:</span>
@@ -307,6 +331,31 @@ document.querySelectorAll('.chip[data-rate]').forEach(c=>c.addEventListener("cli
   document.querySelectorAll('.chip[data-rate]').forEach(x=>x.classList.remove('active'));
   c.classList.add('active');
 }));
+
+// Skip buttons. Rapid taps accumulate into one pending target (and move the big
+// bar live); a single seek fires once the burst settles — steady and lossless.
+let seekTarget=null, seekTimer=null, badgeTimer=null;
+function skipBy(delta){
+  const base = seekTarget!=null ? seekTarget : audio.currentTime;
+  let t = base + delta;
+  t = Math.max(0, isFinite(audio.duration) ? Math.min(t, audio.duration) : t);
+  seekTarget = t;
+  dragging = true;                                   // suppress timeupdate re-sync during the burst
+  if(audio.duration) seek.value = Math.round(t/audio.duration*1000);
+  updateTimes(t);
+  showSkipBadge(Math.round(t - audio.currentTime));
+  clearTimeout(seekTimer);
+  seekTimer = setTimeout(()=>{ audio.currentTime = seekTarget; seekTarget=null; dragging=false; audio.play().catch(()=>{}); }, 260);
+}
+function showSkipBadge(off){
+  const sign = off>0?"+":(off<0?"−":""), a=Math.abs(off);
+  const b=$("#skipbadge");
+  b.textContent = a>=60 ? `${sign}${Math.floor(a/60)}:${String(a%60).padStart(2,"0")}` : `${sign}${a} mp`;
+  b.classList.add("show");
+  clearTimeout(badgeTimer);
+  badgeTimer=setTimeout(()=>b.classList.remove("show"),800);
+}
+document.querySelectorAll('.skipbtn').forEach(btn=>btn.addEventListener("click",()=>skipBy(parseInt(btn.dataset.skip,10))));
 
 function setMediaSession(d){
   if(!("mediaSession" in navigator)) return;
