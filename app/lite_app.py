@@ -20,7 +20,7 @@ from starlette.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from app import core
+from app import core, proxy
 
 _HTTPX_VERIFY = core.CA_BUNDLE if core.USE_SYSTEM_CERTS else True
 _client = httpx.AsyncClient(
@@ -49,7 +49,8 @@ async def api_info(request):
 async def api_audio(request):
     global _active_streams
     url = request.query_params.get("url", "")
-    q = request.query_params.get("q", "compat")
+    q = request.query_params.get("q", "min")
+    rng = request.headers.get("range")
     if _active_streams >= core.MAX_STREAMS:
         return JSONResponse({"error": "Most túl sokan hallgatnak, próbáld pár perc múlva."}, status_code=503)
 
@@ -59,21 +60,10 @@ async def api_audio(request):
         fmt = core.select_format(info["audio_formats"], q)
         if not core.is_allowed_media_url(fmt["url"]):
             raise _Stop(502, "Nem engedélyezett hangforrás.")
-
-        fwd_headers = {"User-Agent": core.UA, "Accept": "*/*"}
-        rng = request.headers.get("range")
-        if rng:
-            fwd_headers["Range"] = rng
-
         try:
-            req = _client.build_request("GET", fmt["url"], headers=fwd_headers)
-            upstream = await _client.send(req, stream=True)
-        except httpx.HTTPError:
-            raise _Stop(502, "Nem sikerült elérni a hangfolyamot.")
-
-        if upstream.status_code >= 400:
-            await upstream.aclose()
-            core.invalidate(url)
+            status, headers, body_gen = await proxy.open_audio(_client, fmt["url"], rng, fmt["mime"], core.UA)
+        except (proxy.ProxyError, httpx.HTTPError):
+            core.invalidate(url)  # stream URL likely expired — re-resolve next time
             raise _Stop(502, "A hangfolyam lejárt, próbáld újra.")
     except core.InfoError as e:
         _active_streams -= 1
@@ -85,41 +75,28 @@ async def api_audio(request):
         _active_streams -= 1
         raise
 
-    sys.stderr.write(
-        f"[audio] range={rng or '-'} -> {upstream.status_code} "
-        f"crange={upstream.headers.get('content-range','-')} "
-        f"clen={upstream.headers.get('content-length','-')}\n"
-    )
-
-    # NB: must stay cacheable — a no-store/no-cache header makes Chromium treat
-    # the audio as a non-seekable live stream, which breaks seeking.
-    out_headers = {
-        "Content-Type": upstream.headers.get("content-type", fmt["mime"]),
-        "Accept-Ranges": "bytes",
-    }
-    for h in ("content-length", "content-range"):
-        if h in upstream.headers:
-            out_headers[h] = upstream.headers[h]
+    # Cacheable on purpose: a no-store header makes Chromium treat audio as a
+    # non-seekable live stream and breaks seeking.
+    sys.stderr.write(f"[audio] q={q} range={rng or '-'} -> {status} clen={headers.get('Content-Length','-')}\n")
 
     async def body():
         global _active_streams
         n = 0
-        status = "done"
+        why = "done"
         try:
-            async for chunk in upstream.aiter_raw():
+            async for chunk in body_gen():
                 n += len(chunk)
                 yield chunk
         except (asyncio.CancelledError, GeneratorExit):
-            status = "client-abort(seek/close)"
+            why = "client-abort(seek/close)"
             raise
         except Exception as e:  # noqa: BLE001
-            status = f"error:{e!r}"
+            why = f"error:{e!r}"
         finally:
             _active_streams -= 1
-            await upstream.aclose()
-            sys.stderr.write(f"[audio] {status} sent={n}B active={_active_streams}\n")
+            sys.stderr.write(f"[audio] {why} sent={n}B active={_active_streams}\n")
 
-    return StreamingResponse(body(), status_code=upstream.status_code, headers=out_headers)
+    return StreamingResponse(body(), status_code=status, headers=headers)
 
 
 class _Stop(Exception):

@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import core
+from app import core, proxy
 
 _HTTPX_VERIFY = core.CA_BUNDLE if core.USE_SYSTEM_CERTS else True
 
@@ -49,7 +49,7 @@ _active_streams = 0
 
 
 @app.get("/api/audio")
-async def api_audio(request: Request, url: str = Query(...), q: str = Query("compat")):
+async def api_audio(request: Request, url: str = Query(...), q: str = Query("min")):
     global _active_streams
     if _active_streams >= core.MAX_STREAMS:
         raise HTTPException(status_code=503, detail="Most túl sokan hallgatnak, próbáld pár perc múlva.")
@@ -62,46 +62,25 @@ async def api_audio(request: Request, url: str = Query(...), q: str = Query("com
         fmt = core.select_format(info["audio_formats"], q)
         if not core.is_allowed_media_url(fmt["url"]):
             raise HTTPException(status_code=502, detail="Nem engedélyezett hangforrás.")
-
-        fwd_headers = {"User-Agent": core.UA, "Accept": "*/*"}
-        range_header = request.headers.get("range")
-        if range_header:
-            fwd_headers["Range"] = range_header
-
         try:
-            upstream_req = _client.build_request("GET", fmt["url"], headers=fwd_headers)
-            upstream = await _client.send(upstream_req, stream=True)
-        except httpx.HTTPError:
-            raise HTTPException(status_code=502, detail="Nem sikerült elérni a hangfolyamot.")
-
-        if upstream.status_code >= 400:
-            await upstream.aclose()
+            status, headers, body_gen = await proxy.open_audio(
+                _client, fmt["url"], request.headers.get("range"), fmt["mime"], core.UA)
+        except (proxy.ProxyError, httpx.HTTPError):
             core.invalidate(url)  # stream URL likely expired — re-resolve next time
             raise HTTPException(status_code=502, detail="A hangfolyam lejárt, próbáld újra.")
     except BaseException:
         _active_streams -= 1
         raise
 
-    # NB: must stay cacheable — a no-store/no-cache header makes Chromium treat
-    # the audio as a non-seekable live stream, which breaks seeking.
-    out_headers = {
-        "Content-Type": upstream.headers.get("content-type", fmt["mime"]),
-        "Accept-Ranges": "bytes",
-    }
-    for h in ("content-length", "content-range"):
-        if h in upstream.headers:
-            out_headers[h] = upstream.headers[h]
-
     async def body():
         global _active_streams
         try:
-            async for chunk in upstream.aiter_raw():
+            async for chunk in body_gen():
                 yield chunk
         finally:
             _active_streams -= 1
-            await upstream.aclose()
 
-    return StreamingResponse(body(), status_code=upstream.status_code, headers=out_headers)
+    return StreamingResponse(body(), status_code=status, headers=headers)
 
 
 @app.get("/healthz")
